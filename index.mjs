@@ -1,52 +1,12 @@
 import express from 'express';
 import { readFileSync } from 'fs';
+import { Lru } from './lru.mjs'
 const app = express()
-const port = 3000
+const port = Number(process.env.PORT ?? 3000)
 
+if (isNaN(port)) throw new Error('$PORT is not a number');
+if (process.env.BASEMAPS_API_KEY == null) throw new Error('Please grab a API key from basemaps.linz.govt.nz and set it as $BASEMAPS_API_KEY');
 
-class Lru {
-    maxSize = 2 ** 15
-    size = 0;
-    resets = 0;
-    cacheA = new Map();
-    cacheB = new Map();
-
-    get(key, fetcher) {
-        let existing = this.cacheA.get(key);
-        if (existing) {
-            existing.hits++;
-            return existing;
-        }
-
-        existing = this.cacheB.get(key);
-        if (existing) {
-            existing.hits++;
-            existing.saves++;
-
-            this.cacheA.set(key, existing);
-            return existing;
-        }
-
-        existing = { promise: fetcher(), hits: 0, saves: 0, key };
-
-        if (this.cacheA.size > this.maxSize) {
-            this.size = existing.size;
-            this.cacheB = this.cacheA;
-            this.cacheA = new Map();
-            this.resets++;
-        }
-        this.cacheA.set(key, existing);
-        return existing;
-    }
-
-    toJSON() {
-        const values = [...this.cacheA.values()].map(f => {
-            return { ...f, promise: undefined }
-        });
-        values.sort((a, b) => a.hits - b.hits)
-        return { maxSize: this.maxSize, cacheA: this.cacheA.size, cacheB: this.cacheB.size, resets: this.resets, cache: values }
-    }
-}
 
 const cache = new Lru();
 
@@ -85,7 +45,6 @@ for (const client of clients) {
 
 const targetUrl = `https://dev.basemaps.linz.govt.nz/v1/tiles/gisborne-2022-2023-0.1m/WebMercatorQuad/{z}/{x}/{y}.{ext}?api=` + process.env.BASEMAPS_API_KEY
 
-if (process.env.BASEMAPS_API_KEY == null) throw new Error('Please grab a API key from basemaps.linz.govt.nz and set it as $BASEMAPS_API_KEY');
 
 
 app.get('/:status/:z/:x/:y.:ext', async (req, res) => {
